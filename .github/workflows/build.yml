@@ -77,9 +77,9 @@ jobs:
       - name: Clone AnyKernel3 and Other Dependencies
         run: |
           echo "Cloning AnyKernel3 and other dependencies..."
-          git clone https://github.com/zentrozx/anykernel
-          # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10
-          # git clone https://github.com/WildPlusKernel/kernel_patches.git
+          git clone https://github.com/askthekaif/AnyKernel3.git -b gki-2.0
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10
+          git clone https://github.com/WildPlusKernel/kernel_patches.git
 
       - name: Initialize and Sync Kernel Source
         run: |
@@ -99,39 +99,9 @@ jobs:
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
           # To Make it Bootable in LOS based roms
-          git config --global user.name "zentrozx" && git config --global user.email "zentrozx.main@gmail.com"
+          git config --global user.name "zentrozx" && git config --global user.email "zentrozx@users.noreply.github.com"
           cd common
-          git revert 973c7a0d8a38e675570c3336c664f5610bd4eb19 --no-edit
-      
-      - name: Apply SukiSU Patch
-        run: |
-          cd "$CONFIG/common"
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
-          git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 ../sus
-          rm -rf ../sus/.git
-          susfs=../sus/kernel_patches
-          cp -r $susfs/fs ./fs
-          cp -r $susfs/include ./include
-          cp $susfs/50_add_susfs_in_gki-android12-5.10.patch .
-          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
-          
-      - name: Fix KernelSU and sus directory state
-        run: |
-          cd "$CONFIG/common"
-
-          echo "Cleaning .git directories (if any)..."
-          rm -rf KernelSU/.git || true
-          rm -rf sus/.git || true
-
-          echo "Fixing Git index state..."
-          git rm --cached -r KernelSU || true
-          git rm --cached -r sus || true
-          git add KernelSU || true
-          git add sus || true
-
-          echo "Committing updated state..."
-          git commit -m "Fix KernelSU & sus state after setup.sh injection" || true
+          # git revert 973c7a0d8a38e675570c3336c664f5610bd4eb19 --no-edit
       
       # - name: Add KernelSU Next
         # run: |
@@ -201,11 +171,11 @@ jobs:
           # cp ../../kernel_patches/69_hide_stuff.patch ./
           # patch -p1 --forward -F 3 < 69_hide_stuff.patch
 
-      # - name: Add Configuration Settings
-        # run: |
-          # echo "Changing to configuration directory: $CONFIG..."
-          # cd "$CONFIG"
-          # echo "Adding configuration settings to gki_defconfig..."
+      - name: Add Configuration Settings
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG"
+          echo "Adding configuration settings to gki_defconfig..."
 
           # # Add KSU configuration settings
           # echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -213,25 +183,25 @@ jobs:
           # # For KSUN or WILD
           # echo "CONFIG_KSU_KPROBES_HOOK=n" >> ./common/arch/arm64/configs/gki_defconfig
                     
-          # # Add additional tmpfs config setting
-          # echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # Add additional tmpfs config setting
+          echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
-          # # Add additional config setting
-          # echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # Add additional config setting
+          echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
-          # # Add BBR Config
-          # echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig 
-          # echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
-          # echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig 
+          # Add BBR Config
+          echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig 
+          echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig 
 
-          # # Remove check_defconfig
-          # sed -i 's/check_defconfig//' ./common/build.config.gki
+          # Remove check_defconfig
+          sed -i 's/check_defconfig//' ./common/build.config.gki
 
       # - name: Add SUSFS Configuration Settings
         # run: |
@@ -275,11 +245,6 @@ jobs:
             sed -E -i '/^CONFIG_LOCALVERSION=/ s/(.*)"$/\1-ZenX+"/' ./common/arch/arm64/configs/gki_defconfig
           fi
 
-      - name: Append CONFIG_HZ_300 and CONFIG_HZ=300 to defconfig
-        run: |
-          echo -e '\nCONFIG_HZ_300=y\nCONFIG_HZ=300' >> "$CONFIG/common/arch/arm64/configs/gki_defconfig"
-          
-
       - name: Build
         run : |
           set -e
@@ -313,17 +278,12 @@ jobs:
           zip -r "../$ZIP_NAME" ./*
           rm ./Image.gz
       
-      # - name: Upload to Telegram
-        # run: |
-          # echo "Uploading zip & Image to Telegram..."
-          # pip3 install git+https://github.com/kaif-00z/UploadGramX.git
-          # uploadgram ${{ secrets.CHAT_ID }} "$ZIP_FILENAME" --token ${{ secrets.BOT_TOKEN }} --fd True
-          # uploadgram ${{ secrets.CHAT_ID }} "Image" --token ${{ secrets.BOT_TOKEN }} --fd True
+      
            
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: SukiSU-ZenX
+          name: KSUN-kernel-ZenX
           path: |
             *.zip
             *Image*
