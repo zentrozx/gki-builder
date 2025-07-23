@@ -1,0 +1,329 @@
+name: Build Script
+permissions:
+  contents: write
+  actions: write 
+
+on:
+  workflow_call:
+    inputs:
+      android_version:
+        required: true
+        type: string
+      kernel_version:
+        required: true
+        type: string
+      sub_level:
+        required: true
+        type: string
+      os_patch_level:
+        required: true
+        type: string
+      revision:
+        required: false
+        type: string
+
+jobs:
+  build-gki:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+
+    steps:
+      - name: Maximize Build Space
+        uses: AdityaGarg8/remove-unwanted-software@v5
+        with:
+          remove-dotnet: 'true'          # Frees ~2 GB
+          remove-android: 'true'         # Frees ~9 GB
+          remove-haskell: 'true'         # Frees ~5.2 GB
+          remove-codeql: 'true'          # Frees ~5.4 GB
+          remove-docker-images: 'true'   # Frees ~3.2 GB
+          remove-large-packages: 'true'  # Frees ~3.1 GB
+          remove-swapfile: 'true'        # Frees ~4 GB
+          remove-cached-tools: 'false'   # Avoid unless confirmed safe
+          verbose: 'true'                # Enable detailed logging
+          
+      - name: Set CONFIG Environment Variable
+        run: |
+          # Set CONFIG dynamically based on inputs values
+          CONFIG="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.sub_level }}"
+
+          # Set CONFIG as an environment variable for future steps
+          echo "CONFIG=$CONFIG" >> $GITHUB_ENV
+
+          echo "CONFIG set to: $CONFIG"
+
+      - name: Install ccache
+        run: sudo apt update && sudo apt install -y ccache
+
+      - name: Set up ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+          
+      - name: Install Repo
+        run: |
+          mkdir -p ./git-repo
+          echo "Downloading repo tool..."
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ./git-repo/repo
+          chmod a+rx ./git-repo/repo
+          echo "REPO=$GITHUB_WORKSPACE/./git-repo/repo" >> $GITHUB_ENV
+
+      - name: Clone AnyKernel3 and Other Dependencies
+        run: |
+          echo "Cloning AnyKernel3 and other dependencies..."
+          git clone https://github.com/zentrozx/anykernel
+          # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10
+          # git clone https://github.com/WildPlusKernel/kernel_patches.git
+
+      - name: Initialize and Sync Kernel Source
+        run: |
+          echo "Creating folder for configuration: $CONFIG..."
+          mkdir -p "$CONFIG"
+          cd "$CONFIG"
+          echo "Initializing and syncing kernel source..."
+          FORMATTED_BRANCH="${{ inputs.android_version }}-${{ inputs.kernel_version }}-${{ inputs.os_patch_level }}"
+          $REPO init --u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+          REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
+          DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+          if grep -q deprecated <<< $REMOTE_BRANCH; then
+            echo "Found deprecated branch: $FORMATTED_BRANCH"
+            sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
+          fi
+          $REPO --version
+          $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+
+          # To Make it Bootable in LOS based roms
+          git config --global user.name "zentrozx" && git config --global user.email "zentrozx.main@gmail.com"
+          cd common
+          git revert 973c7a0d8a38e675570c3336c664f5610bd4eb19 --no-edit
+      
+      - name: Apply SukiSU Patch
+        run: |
+          cd "$CONFIG/common"
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
+          git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 ../sus
+          rm -rf ../sus/.git
+          susfs=../sus/kernel_patches
+          cp -r $susfs/fs ./fs
+          cp -r $susfs/include ./include
+          cp $susfs/50_add_susfs_in_gki-android12-5.10.patch .
+          patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+          
+      - name: Fix KernelSU and sus directory state
+        run: |
+          cd "$CONFIG/common"
+
+          echo "Cleaning .git directories (if any)..."
+          rm -rf KernelSU/.git || true
+          rm -rf sus/.git || true
+
+          echo "Fixing Git index state..."
+          git rm --cached -r KernelSU || true
+          git rm --cached -r sus || true
+          git add KernelSU || true
+          git add sus || true
+
+          echo "Committing updated state..."
+          git commit -m "Fix KernelSU & sus state after setup.sh injection" || true
+      
+      # - name: Add KernelSU Next
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG"
+
+          # echo "Adding KernelSU Next..."
+          # curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          
+      # - name: Apply SUSFS Patches for KernelSU Next
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG"
+          
+          # echo "Applying SUSFS patches..."
+          
+          # # Copy SUSFS patches
+          # cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch ./common/
+
+          # cd common
+          # patch -p1 --forward < 50_add_susfs_in_gki-android12-5.10.patch
+          # cd ..
+
+          # cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+          # cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+            
+          # echo "Applying SUSFS patches for KernelSU Next..."
+          # cd ./KernelSU-Next
+
+          # cp ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+          # patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
+          
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_apk_sign.c.patch ./
+          # patch -p1 --forward < fix_apk_sign.c.patch
+          
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_core_hook.c.patch ./
+          # patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
+          
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_selinux.c.patch ./
+          # patch -p1 --forward < fix_selinux.c.patch
+          
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_ksud.c.patch ./
+          # patch -p1 --forward < fix_ksud.c.patch
+
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_rules.c.patch ./
+          # patch -p1 --forward < fix_rules.c.patch
+
+          # cp "../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_sucompat.c.patch" ./
+          # patch -p1 --forward < fix_sucompat.c.patch
+
+          # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_kernel_compat.c.patch ./
+          # patch -p1 --forward < fix_kernel_compat.c.patch
+
+      # - name: Apply Hooks Patches
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG/common"
+          
+          # echo "Applying hooks for KernelSU-Next..."
+          # cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
+          # patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
+
+      # - name: Apply Hide Stuff Patches
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG/common"
+          # cp ../../kernel_patches/69_hide_stuff.patch ./
+          # patch -p1 --forward -F 3 < 69_hide_stuff.patch
+
+      # - name: Add Configuration Settings
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG"
+          # echo "Adding configuration settings to gki_defconfig..."
+
+          # # Add KSU configuration settings
+          # echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # # For KSUN or WILD
+          # echo "CONFIG_KSU_KPROBES_HOOK=n" >> ./common/arch/arm64/configs/gki_defconfig
+                    
+          # # Add additional tmpfs config setting
+          # echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          # # Add additional config setting
+          # echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          # # Add BBR Config
+          # echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig 
+          # echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_NET_SCH_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_TCP_CONG_HTCP=n" >> ./common/arch/arm64/configs/gki_defconfig 
+
+          # # Remove check_defconfig
+          # sed -i 's/check_defconfig//' ./common/build.config.gki
+
+      # - name: Add SUSFS Configuration Settings
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG"
+
+          # # Add SUSFS configuration settings
+          # echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          # # For KSUN or WILD
+          # echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
+
+      - name: Change Kernel Name
+        run: |
+          cd "$CONFIG"
+
+          # modify UTS_VERSION
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Tue Jul 22 06:11:05 AM UTC 2025"}' ./common/scripts/mkcompile_h
+          
+          sed -i '$s|echo "\$res"|echo "-ZenX+"|' ./common/scripts/setlocalversion
+          if [ -f "build/build.sh" ]; then
+            sed -i 's/-dirty//' ./common/scripts/setlocalversion
+          else
+            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' ./common/BUILD.bazel
+            rm -rf ./common/android/abi_gki_protected_exports_*
+            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+            sed -E -i '/^CONFIG_LOCALVERSION=/ s/(.*)"$/\1-ZenX+"/' ./common/arch/arm64/configs/gki_defconfig
+          fi
+
+      - name: Append CONFIG_HZ_300 and CONFIG_HZ=300 to defconfig
+        run: |
+          echo -e '\nCONFIG_HZ_300=y\nCONFIG_HZ=300' >> "$CONFIG/common/arch/arm64/configs/gki_defconfig"
+          
+
+      - name: Build
+        run : |
+          set -e
+          set -x
+          cd "$CONFIG"
+          echo "Building the kernel..."
+          if [ -f "build/build.sh" ]; then
+            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
+          else
+            tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_aarch64_dist || exit 1
+          fi
+          ccache --show-stats
+
+      - name: Copy Images
+        run: |
+          cp ./$CONFIG/out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image ./
+
+          # Create gzip of the Image file
+          gzip -n -k -f -9 ./Image > ./Image.gz
+
+      - name: Create ZIP File
+        run: |
+          echo "Creating zip files for all formats..."
+          cd ./AnyKernel3
+
+          # Create and upload zip
+          ZIP_NAME="ZenX+ KSUN GKI ${{ inputs.kernel_version }}-${{ inputs.os_patch_level }} $(date -u +'%d-%m-%Y').zip"
+          echo "ZIP_FILENAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "Creating zip file: $ZIP_NAME..."
+          mv ../Image.gz ./Image.gz
+          zip -r "../$ZIP_NAME" ./*
+          rm ./Image.gz
+      
+      # - name: Upload to Telegram
+        # run: |
+          # echo "Uploading zip & Image to Telegram..."
+          # pip3 install git+https://github.com/kaif-00z/UploadGramX.git
+          # uploadgram ${{ secrets.CHAT_ID }} "$ZIP_FILENAME" --token ${{ secrets.BOT_TOKEN }} --fd True
+          # uploadgram ${{ secrets.CHAT_ID }} "Image" --token ${{ secrets.BOT_TOKEN }} --fd True
+           
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SukiSU-ZenX
+          path: |
+            *.zip
+            *Image*
