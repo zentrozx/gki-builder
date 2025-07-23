@@ -271,7 +271,7 @@ jobs:
           cd ./AnyKernel3
 
           # Create and upload zip
-          ZIP_NAME="VenGeance+ KSUN GKI ${{ inputs.kernel_version }}-${{ inputs.os_patch_level }} $(date -u +'%d-%m-%Y').zip"
+          ZIP_NAME="ZenX+ GKI ${{ inputs.kernel_version }}-${{ inputs.os_patch_level }} $(date -u +'%d-%m-%Y').zip"
           echo "ZIP_FILENAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "Creating zip file: $ZIP_NAME..."
           mv ../Image.gz ./Image.gz
@@ -288,7 +288,7 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: KSUN-kernel-VenGeance
+          name: kernel-ZemX
           path: |
             *.zip
             *Image*
