@@ -155,21 +155,21 @@ jobs:
           # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_kernel_compat.c.patch ./
           # patch -p1 --forward < fix_kernel_compat.c.patch
 
-      # - name: Apply Hooks Patches
-        # run: |
-          # echo "Changing to configuration directory: $CONFIG..."
-          # cd "$CONFIG/common"
+      - name: Apply Hooks Patches
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/common"
           
-          # echo "Applying hooks for KernelSU-Next..."
-          # cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
-          # patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
+          echo "Applying hooks for KernelSU-Next..."
+          cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
+          patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
 
-      # - name: Apply Hide Stuff Patches
-        # run: |
-          # echo "Changing to configuration directory: $CONFIG..."
-          # cd "$CONFIG/common"
-          # cp ../../kernel_patches/69_hide_stuff.patch ./
-          # patch -p1 --forward -F 3 < 69_hide_stuff.patch
+      - name: Apply Hide Stuff Patches
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/common"
+          cp ../../kernel_patches/69_hide_stuff.patch ./
+          patch -p1 --forward -F 3 < 69_hide_stuff.patch
 
       - name: Add Configuration Settings
         run: |
@@ -271,19 +271,24 @@ jobs:
           cd ./AnyKernel3
 
           # Create and upload zip
-          ZIP_NAME="ZenX+ KSUN GKI ${{ inputs.kernel_version }}-${{ inputs.os_patch_level }} $(date -u +'%d-%m-%Y').zip"
+          ZIP_NAME="VenGeance+ KSUN GKI ${{ inputs.kernel_version }}-${{ inputs.os_patch_level }} $(date -u +'%d-%m-%Y').zip"
           echo "ZIP_FILENAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "Creating zip file: $ZIP_NAME..."
           mv ../Image.gz ./Image.gz
           zip -r "../$ZIP_NAME" ./*
           rm ./Image.gz
       
-      
+      # - name: Upload to Telegram
+        # run: |
+          # echo "Uploading zip & Image to Telegram..."
+          # pip3 install git+https://github.com/kaif-00z/UploadGramX.git
+          # uploadgram ${{ secrets.CHAT_ID }} "$ZIP_FILENAME" --token ${{ secrets.BOT_TOKEN }} --fd True
+          # uploadgram ${{ secrets.CHAT_ID }} "Image" --token ${{ secrets.BOT_TOKEN }} --fd True
            
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: KSUN-kernel-ZenX
+          name: KSUN-kernel-VenGeance
           path: |
             *.zip
             *Image*
