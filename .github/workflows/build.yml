@@ -78,8 +78,8 @@ jobs:
         run: |
           echo "Cloning AnyKernel3 and other dependencies..."
           git clone https://github.com/askthekaif/AnyKernel3.git -b gki-2.0
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10
-          git clone https://github.com/WildPlusKernel/kernel_patches.git
+          # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10
+          # git clone https://github.com/WildPlusKernel/kernel_patches.git
 
       - name: Initialize and Sync Kernel Source
         run: |
@@ -99,9 +99,16 @@ jobs:
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
           # To Make it Bootable in LOS based roms
-          git config --global user.name "zentrozx" && git config --global user.email "zentrozx@users.noreply.github.com"
+          git config --global user.name "zentrozx" && git config --global user.email "zentrozx@proton.me"
           cd common
           # git revert 973c7a0d8a38e675570c3336c664f5610bd4eb19 --no-edit
+        
+        - name : Add SukiSuNxt
+          run: |
+            echo "Change Dir : $CONFIG"
+            cd "$CONFIG"
+            curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+            
       
       # - name: Add KernelSU Next
         # run: |
@@ -155,21 +162,21 @@ jobs:
           # cp ../../kernel_patches/next/susfs_fix_patches/v1.5.9/fix_kernel_compat.c.patch ./
           # patch -p1 --forward < fix_kernel_compat.c.patch
 
-      - name: Apply Hooks Patches
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/common"
+      # - name: Apply Hooks Patches
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG/common"
           
-          echo "Applying hooks for KernelSU-Next..."
-          cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
-          patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
+          # echo "Applying hooks for KernelSU-Next..."
+          # cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
+          # patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
 
-      - name: Apply Hide Stuff Patches
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/common"
-          cp ../../kernel_patches/69_hide_stuff.patch ./
-          patch -p1 --forward -F 3 < 69_hide_stuff.patch
+      # - name: Apply Hide Stuff Patches
+        # run: |
+          # echo "Changing to configuration directory: $CONFIG..."
+          # cd "$CONFIG/common"
+          # cp ../../kernel_patches/69_hide_stuff.patch ./
+          # patch -p1 --forward -F 3 < 69_hide_stuff.patch
 
       - name: Add Configuration Settings
         run: |
