@@ -101,7 +101,7 @@ jobs:
           cd common
           # git revert 973c7a0d8a38e675570c3336c664f5610bd4eb19 --no-edit
         
-        - name : Add SukiSuNxt
+        - name: Add SukiSuNxt
           run: |
             echo "Change Dir : $CONFIG"
             cd "$CONFIG"
@@ -293,7 +293,7 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-ZemX
+          name: kernel-ZenX
           path: |
             *.zip
             *Image*
